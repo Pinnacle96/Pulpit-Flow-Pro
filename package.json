@@ -1,0 +1,113 @@
+{
+  "name": "pulpit-flow-pro",
+  "version": "1.0.0",
+  "description": "Professional church production platform",
+  "author": "Noah Abayomi Ogunniran (CEO, Pinnacle Tech Hub) <info.pinnacletechhub@gmail.com>",
+  "main": "electron/main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5173 --strictPort",
+    "build": "vite build",
+    "preview": "vite preview",
+    "generate-icons": "node scripts/generate-icons.js",
+    "electron": "electron .",
+    "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron-build": "npm run generate-icons && npm run build && npx electron-builder --config.directories.output=release2",
+    "electron-build-release": "npm run generate-icons && npm run build && npx electron-builder",
+    "import-bible": "node scripts/import-bible.js",
+    "prestart": "npm run import-bible",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "lucide-react": "^0.292.0",
+    "better-sqlite3": "^11.8.1",
+    "openai": "^6.38.0",
+    "qrcode": "^1.5.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "sax": "^1.4.1",
+    "ws": "^8.14.2",
+    "zustand": "^4.4.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.1.0",
+    "autoprefixer": "^10.4.16",
+    "concurrently": "^8.2.2",
+    "electron": "^31.0.0",
+    "electron-builder": "^24.6.4",
+    "electron-rebuild": "^3.2.9",
+    "png-to-ico": "^2.1.0",
+    "postcss": "^8.4.31",
+    "sharp": "^0.34.3",
+    "sql.js": "^1.14.1",
+    "tailwindcss": "^3.3.0",
+    "vite": "^5.0.0",
+    "wait-on": "^7.0.1"
+  },
+  "build": {
+    "appId": "com.church.pulpitflowpro",
+    "productName": "Pulpit Flow Pro",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "ui-dist/**/*",
+      "electron/**/*",
+      "outputs/**/*",
+      "assets/**/*",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "outputs",
+        "to": "outputs",
+        "filter": ["**/*"]
+      },
+      { "from": "EnglishAmplifiedBible.xml", "to": "bibles/EnglishAmplifiedBible.xml" },
+      { "from": "EnglishAmplifiedClassicBible.xml", "to": "bibles/EnglishAmplifiedClassicBible.xml" },
+      { "from": "EnglishASVBible.xml", "to": "bibles/EnglishASVBible.xml" },
+      { "from": "EnglishBereanBible.xml", "to": "bibles/EnglishBereanBible.xml" },
+      { "from": "EnglishCSBBible.xml", "to": "bibles/EnglishCSBBible.xml" },
+      { "from": "EnglishESVBible.xml", "to": "bibles/EnglishESVBible.xml" },
+      { "from": "EnglishGNTBible.xml", "to": "bibles/EnglishGNTBible.xml" },
+      { "from": "EnglishGWBible.xml", "to": "bibles/EnglishGWBible.xml" },
+      { "from": "EnglishKJBible (10).xml", "to": "bibles/EnglishKJBible.xml" },
+      { "from": "EnglishMEVBible.xml", "to": "bibles/EnglishMEVBible.xml" },
+      { "from": "EnglishNIVBible.xml", "to": "bibles/EnglishNIVBible.xml" },
+      { "from": "EnglishNKJBible.xml", "to": "bibles/EnglishNKJBible.xml" },
+      { "from": "EnglishNLTBible.xml", "to": "bibles/EnglishNLTBible.xml" },
+      { "from": "EnglishPassionBible.xml", "to": "bibles/EnglishPassionBible.xml" },
+      { "from": "EnglishRSVBible.xml", "to": "bibles/EnglishRSVBible.xml" },
+      { "from": "EnglishTLBible.xml", "to": "bibles/EnglishTLBible.xml" }
+    ],
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico"
+    }
+  }
+}

@@ -1,0 +1,898 @@
+/* Pulpit Flow Pro — shared output screen theme */
+
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Open+Sans:wght@400;600;700&display=swap');
+
+:root {
+  --pfp-bg: #0f1419;
+  --pfp-bg-panel: #1a1f2e;
+  --pfp-bg-elevated: #242b3d;
+  --pfp-gold: #d4a853;
+  --pfp-gold-light: #e8c878;
+  --pfp-text: #f9fafb;
+  --pfp-text-dim: #9ca3af;
+  --pfp-font-display: 'Montserrat', 'Open Sans', sans-serif;
+  --pfp-font-body: 'Open Sans', system-ui, sans-serif;
+  --pfp-shadow-text: 0 2px 8px rgba(0, 0, 0, 0.85), 0 0 40px rgba(0, 0, 0, 0.45);
+  --pfp-transition: 280ms ease;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* Reconnect banner */
+.pfp-reconnect {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99999;
+  padding: 12px 24px;
+  font-family: var(--pfp-font-body);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--pfp-text);
+  background: rgba(26, 31, 46, 0.95);
+  border: 1px solid rgba(212, 168, 83, 0.4);
+  border-radius: 999px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.pfp-reconnect.failed {
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fecaca;
+}
+
+.pfp-reconnect[hidden] {
+  display: none !important;
+}
+
+/* Content fade */
+.pfp-fade-in {
+  animation: pfpFadeIn var(--pfp-transition) forwards;
+}
+
+@keyframes pfpFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ========== DISPLAY (/display) ========== */
+body.pfp-display {
+  font-family: var(--pfp-font-body);
+  background: var(--pfp-bg);
+  color: var(--pfp-text);
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+body.pfp-display #root {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+body.pfp-display #bg-image,
+body.pfp-display #bg-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: none;
+}
+
+body.pfp-display #root[data-bg-kind="media-image"][data-image-fit="original"] #bg-image {
+  inset: auto;
+  top: 50%;
+  left: 50%;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  transform: translate(-50%, -50%);
+  object-fit: contain;
+}
+
+body.pfp-display #root[data-bg-kind="media-image"][data-image-fit="stretch"] #bg-image {
+  inset: 0;
+  top: auto;
+  left: auto;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  transform: none;
+  object-fit: fill;
+}
+
+body.pfp-display #backdrop {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at top, rgba(212, 168, 83, 0.12) 0%, transparent 55%),
+    linear-gradient(180deg, var(--pfp-bg-panel) 0%, var(--pfp-bg) 100%);
+}
+
+body.pfp-display #content {
+  position: relative;
+  width: 100%;
+  max-width: 1600px;
+  padding: 64px 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+  z-index: 10;
+}
+
+body.pfp-display #standby {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+body.pfp-display #standby-logo {
+  width: 112px;
+  height: 112px;
+  background: linear-gradient(135deg, var(--pfp-gold) 0%, var(--pfp-gold-light) 100%);
+  border-radius: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--pfp-font-display);
+  font-size: 44px;
+  font-weight: 700;
+  color: var(--pfp-bg);
+  box-shadow: 0 16px 48px rgba(212, 168, 83, 0.25);
+}
+
+body.pfp-display #standby-text {
+  font-family: var(--pfp-font-display);
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+body.pfp-display #standby-sub {
+  font-size: 18px;
+  color: var(--pfp-text-dim);
+}
+
+body.pfp-display #main-text {
+  font-family: var(--pfp-font-display);
+  font-size: clamp(40px, 4.2vw, 64px);
+  line-height: 1.28;
+  font-weight: 700;
+  text-shadow: var(--pfp-shadow-text);
+  white-space: pre-wrap;
+  margin-bottom: 28px;
+}
+
+body.pfp-display #main-text.pfp-lyrics {
+  font-family: var(--pfp-font-body);
+  font-weight: 600;
+}
+
+body.pfp-display .pfp-verse-block {
+  font-family: var(--pfp-font-body);
+  font-size: clamp(36px, 3.5vw, 48px);
+  line-height: 1.32;
+  font-weight: 600;
+  text-shadow: var(--pfp-shadow-text);
+  white-space: pre-wrap;
+}
+
+body.pfp-display #reference {
+  font-family: var(--pfp-font-display);
+  font-size: clamp(22px, 2vw, 32px);
+  font-weight: 700;
+  color: var(--pfp-gold);
+  text-shadow: var(--pfp-shadow-text);
+  margin-top: 8px;
+}
+
+body.pfp-display #translation {
+  font-size: 18px;
+  color: var(--pfp-text-dim);
+  text-shadow: var(--pfp-shadow-text);
+}
+
+body.pfp-display .dual-wrap {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+  text-align: left;
+  width: 100%;
+}
+
+body.pfp-display .dual-translation {
+  font-size: 15px;
+  color: var(--pfp-text-dim);
+  margin-top: 8px;
+  text-shadow: var(--pfp-shadow-text);
+}
+
+body.pfp-display #qr-wrap {
+  margin-top: 28px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+body.pfp-display #qr-image {
+  width: 240px;
+  height: 240px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 10px;
+}
+
+body.pfp-display #qr-text {
+  max-width: 560px;
+  font-size: 20px;
+  color: var(--pfp-text-dim);
+  white-space: pre-wrap;
+}
+
+body.pfp-display #lower-third {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0 80px 56px;
+  box-sizing: border-box;
+  display: none;
+  z-index: 25;
+  pointer-events: none;
+}
+
+body.pfp-display #lower-third.visible {
+  display: block;
+}
+
+body.pfp-display #lower-third-text {
+  background: linear-gradient(90deg, rgba(15, 20, 25, 0.92) 0%, rgba(26, 31, 46, 0.88) 100%);
+  padding: 18px 28px;
+  border-top: 4px solid var(--pfp-gold);
+  border-radius: 0 14px 14px 0;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  font-family: var(--pfp-font-display);
+  font-size: clamp(18px, 2vw, 30px);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--pfp-text);
+  text-shadow: var(--pfp-shadow-text);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+body.pfp-display.blank #content,
+body.pfp-display.blank #backdrop {
+  display: none;
+}
+
+body.pfp-display.blank {
+  background: #000;
+}
+
+/* ========== STREAM (/stream) ========== */
+html:has(body.pfp-stream) {
+  width: 100%;
+  height: 100%;
+}
+
+body.pfp-stream {
+  font-family: var(--pfp-font-body);
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: transparent !important;
+  overflow: hidden;
+}
+
+/* Visible background when previewing inside the operator dashboard */
+body.pfp-stream.preview {
+  background: var(--pfp-bg) !important;
+}
+
+body.pfp-stream #overlay-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: clamp(16px, 3vh, 48px) clamp(20px, 3vw, 56px);
+  box-sizing: border-box;
+}
+
+body.pfp-stream #overlay-container.full {
+  justify-content: center;
+  padding: 72px 80px;
+}
+
+body.pfp-stream .lower-third {
+  background: linear-gradient(90deg, rgba(15, 20, 25, 0.92) 0%, rgba(26, 31, 46, 0.88) 100%);
+  padding: 28px 36px;
+  border-top: 4px solid var(--pfp-gold);
+  border-radius: 0 14px 14px 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+body.pfp-stream #overlay-container.full .lower-third {
+  border-top: 0;
+  border-left: 5px solid var(--pfp-gold);
+  border-radius: 16px;
+  max-width: 1400px;
+}
+
+body.pfp-stream #overlay-text {
+  font-family: var(--pfp-font-display);
+  font-size: clamp(20px, 2.6vw, 44px);
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--pfp-text);
+  text-shadow: var(--pfp-shadow-text);
+  margin-bottom: 8px;
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+body.pfp-stream #overlay-ref {
+  font-size: clamp(14px, 1.4vw, 22px);
+  font-weight: 600;
+  color: var(--pfp-gold);
+  text-shadow: var(--pfp-shadow-text);
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+body.pfp-stream .hidden {
+  display: none !important;
+}
+
+/* ========== STAGE (/stage) ========== */
+body.pfp-stage {
+  font-family: var(--pfp-font-body);
+  background: var(--pfp-bg);
+  color: var(--pfp-text);
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+body.pfp-stage #root {
+  height: 100%;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+body.pfp-stage .pfp-monitor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  background: var(--pfp-bg-panel);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+}
+
+body.pfp-stage .pfp-badge {
+  font-family: var(--pfp-font-display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pfp-gold);
+}
+
+body.pfp-stage #meta {
+  text-align: right;
+}
+
+body.pfp-stage #clock {
+  font-family: var(--pfp-font-display);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+body.pfp-stage #timer {
+  font-size: 16px;
+  color: var(--pfp-text-dim);
+  margin-top: 4px;
+}
+
+body.pfp-stage #panes {
+  flex: 1;
+  display: grid;
+  grid-template-rows: 3fr 2fr;
+  gap: 20px;
+  min-height: 0;
+}
+
+body.pfp-stage .pane {
+  background: var(--pfp-bg-panel);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+body.pfp-stage .pane-label {
+  font-family: var(--pfp-font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--pfp-gold);
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+body.pfp-stage .pane-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+}
+
+body.pfp-stage #current-text {
+  font-family: var(--pfp-font-display);
+  font-size: clamp(32px, 4vw, 52px);
+  line-height: 1.35;
+  font-weight: 700;
+  text-align: center;
+  white-space: pre-wrap;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+}
+
+body.pfp-stage #next-text {
+  font-size: clamp(24px, 2.5vw, 36px);
+  line-height: 1.4;
+  font-weight: 600;
+  text-align: center;
+  color: var(--pfp-text-dim);
+  white-space: pre-wrap;
+}
+
+body.pfp-stage .pfp-chord-line {
+  font-size: clamp(22px, 2vw, 32px);
+  line-height: 1.2;
+  color: var(--pfp-gold);
+  font-weight: 700;
+  margin-bottom: 8px;
+  white-space: pre;
+}
+
+body.pfp-stage #chords-panel {
+  position: fixed;
+  top: 32px;
+  right: 32px;
+  width: 300px;
+  max-height: 40vh;
+  overflow: auto;
+  background: var(--pfp-bg-panel);
+  border: 1px solid rgba(212, 168, 83, 0.35);
+  border-radius: 14px;
+  padding: 20px;
+  display: none;
+  z-index: 20;
+}
+
+body.pfp-stage #chords-panel.visible {
+  display: block;
+}
+
+body.pfp-stage.blank #root {
+  display: none;
+}
+
+body.pfp-stage.blank {
+  background: #000;
+}
+
+/* ========== PREACHER (/preacher) ========== */
+body.pfp-preacher {
+  font-family: var(--pfp-font-body);
+  background: var(--pfp-bg);
+  color: var(--pfp-text);
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+body.pfp-preacher #root {
+  height: 100%;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+body.pfp-preacher #header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  background: var(--pfp-bg-panel);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+}
+
+body.pfp-preacher #service-pos {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--pfp-text-dim);
+  margin-top: 4px;
+}
+
+body.pfp-preacher #content {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 20px;
+  min-height: 0;
+}
+
+body.pfp-preacher #scripture-text {
+  font-size: clamp(22px, 2.2vw, 32px);
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+body.pfp-preacher #scripture-ref {
+  font-family: var(--pfp-font-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--pfp-gold);
+  margin-top: 12px;
+}
+
+body.pfp-preacher #notes-text {
+  font-size: 18px;
+  line-height: 1.55;
+  color: var(--pfp-text-dim);
+  white-space: pre-wrap;
+}
+
+body.pfp-preacher .pfp-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--pfp-text-dim);
+  font-size: 15px;
+}
+
+body.pfp-preacher .pfp-empty-icon {
+  width: 72px;
+  height: 72px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  background: var(--pfp-bg-elevated);
+  border-radius: 16px;
+}
+
+body.pfp-preacher.blank #root {
+  display: none;
+}
+
+body.pfp-preacher.blank {
+  background: #000;
+}
+
+/* ========== REMOTE (/remote) ========== */
+body.pfp-remote {
+  font-family: var(--pfp-font-body);
+  background: var(--pfp-bg);
+  color: var(--pfp-text);
+  min-height: 100vh;
+  padding: 20px;
+}
+
+body.pfp-remote .container {
+  max-width: 440px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+body.pfp-remote header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: var(--pfp-bg-panel);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+}
+
+body.pfp-remote header h1 {
+  font-family: var(--pfp-font-display);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--pfp-gold);
+}
+
+body.pfp-remote .status-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+body.pfp-remote .status-pill.live {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+body.pfp-remote .card {
+  background: var(--pfp-bg-panel);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+body.pfp-remote .card-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pfp-text-dim);
+}
+
+body.pfp-remote input,
+body.pfp-remote select {
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 16px;
+  font-family: inherit;
+  color: var(--pfp-text);
+  background: var(--pfp-bg-elevated);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  outline: none;
+}
+
+body.pfp-remote input:focus,
+body.pfp-remote select:focus {
+  border-color: var(--pfp-gold);
+  box-shadow: 0 0 0 3px rgba(212, 168, 83, 0.15);
+}
+
+body.pfp-remote .button-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+body.pfp-remote button {
+  min-height: 52px;
+  padding: 14px 12px;
+  font-family: var(--pfp-font-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--pfp-text);
+  background: var(--pfp-bg-elevated);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+body.pfp-remote button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+body.pfp-remote button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+body.pfp-remote .btn-primary {
+  background: linear-gradient(135deg, var(--pfp-gold) 0%, #b8933f 100%);
+  color: var(--pfp-bg);
+  border-color: transparent;
+}
+
+body.pfp-remote .btn-danger {
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+body.pfp-remote .block-title {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+body.pfp-remote .slide-snippet {
+  font-size: 13px;
+  color: var(--pfp-text-dim);
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+body.pfp-remote .status-bar {
+  text-align: center;
+  padding: 12px;
+  font-size: 13px;
+  color: var(--pfp-text-dim);
+  background: var(--pfp-bg-elevated);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+body.pfp-remote .hidden {
+  display: none !important;
+}
+
+/* ========== PREVIEW (/preview) ========== */
+body.pfp-preview {
+  font-family: var(--pfp-font-body);
+  background: var(--pfp-bg);
+  color: var(--pfp-text);
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+body.pfp-preview #root {
+  height: 100%;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+body.pfp-preview #header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: var(--pfp-bg-panel);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+}
+
+body.pfp-preview #header h1 {
+  font-family: var(--pfp-font-display);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pfp-gold);
+}
+
+body.pfp-preview .subtitle {
+  font-size: 12px;
+  color: var(--pfp-text-dim);
+  margin-top: 2px;
+}
+
+body.pfp-preview #grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 14px;
+  min-height: 0;
+}
+
+body.pfp-preview .cell {
+  background: var(--pfp-bg-panel);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+body.pfp-preview .cell-label {
+  padding: 10px 14px;
+  font-family: var(--pfp-font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pfp-text-dim);
+  background: var(--pfp-bg-elevated);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+body.pfp-preview .cell-content {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+  background: #0a0d12;
+}
+
+body.pfp-preview iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+/* Shared monitor pane (stage + preacher) */
+.pfp-pane {
+  background: var(--pfp-bg-panel);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pfp-pane-label {
+  font-family: var(--pfp-font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pfp-gold);
+  margin-bottom: 12px;
+}
+
+.pfp-pane-body {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}

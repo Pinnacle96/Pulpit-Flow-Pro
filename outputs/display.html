@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pulpit Flow Pro - Display</title>
+  <link rel="stylesheet" href="/outputs/output-theme.css" />
+</head>
+<body class="pfp-display">
+  <div id="root">
+    <div id="backdrop"></div>
+    <img id="bg-image" alt="" />
+    <video id="bg-video" muted loop playsinline></video>
+    
+    <div id="content">
+      <div id="standby">
+        <div id="standby-logo">P</div>
+        <div id="standby-text">Pulpit Flow Pro</div>
+        <div id="standby-sub">Ready to present</div>
+      </div>
+      
+      <div id="main-text" style="display: none;"></div>
+      <div id="reference" style="display: none;"></div>
+      <div id="translation" style="display: none;"></div>
+      <div id="qr-wrap">
+        <img id="qr-image" alt="" />
+        <div id="qr-text"></div>
+      </div>
+    </div>
+    <div id="lower-third">
+      <div id="lower-third-text"></div>
+    </div>
+  </div>
+
+  <div id="pfp-reconnect" class="pfp-reconnect" hidden></div>
+  <script src="/outputs/output-utils.js"></script>
+  <script>
+    const DEBUG = new URLSearchParams(location.search).has('debug');
+    const log = (...args) => DEBUG && console.log('[Display]', ...args);
+
+    const root = document.getElementById('root');
+    const backdrop = document.getElementById('backdrop');
+    const bgImage = document.getElementById('bg-image');
+    const bgVideo = document.getElementById('bg-video');
+    const content = document.getElementById('content');
+    const standby = document.getElementById('standby');
+    const mainText = document.getElementById('main-text');
+    const reference = document.getElementById('reference');
+    const translation = document.getElementById('translation');
+    const qrWrap = document.getElementById('qr-wrap');
+    const qrImage = document.getElementById('qr-image');
+    const qrText = document.getElementById('qr-text');
+    const lowerThird = document.getElementById('lower-third');
+    const lowerThirdText = document.getElementById('lower-third-text');
+
+    let currentMessage = null;
+    let frozen = false;
+    let goLive = false;
+    const OUTPUT_KEY = 'display';
+    let baseBackground = null;
+    let slideBackground = null;
+    let countdownInterval = null;
+    let countdownPayload = null;
+    let lowerThirdTimeout = null;
+
+    let connection = null;
+
+    async function loadPublicSettings() {
+      try {
+        const res = await fetch(`http://${location.host}/api/settings/public`);
+        if (!res.ok) return;
+        const data = await res.json().catch(() => ({}));
+        const name = String(data?.church_name || '').trim();
+        const logoUrl = String(data?.logo_url || '').trim();
+        const fit = String(data?.image_fit_mode || '').trim().toLowerCase() === 'stretch' ? 'stretch' : 'original';
+        root.dataset.imageFit = fit;
+        if (name) document.getElementById('standby-text').textContent = name;
+        if (logoUrl) {
+          const el = document.getElementById('standby-logo');
+          el.textContent = '';
+          el.style.background = 'rgba(0,0,0,0.15)';
+          el.style.padding = '0';
+          el.style.overflow = 'hidden';
+          const img = document.createElement('img');
+          img.src = logoUrl;
+          img.alt = '';
+          img.style.width = '100%';
+          img.style.height = '100%';
+          img.style.objectFit = 'contain';
+          el.appendChild(img);
+        }
+      } catch {}
+    }
+
+    function connect() {
+      connection = window.PfpOutput.createConnection({
+        onopen: () => log('WebSocket connected'),
+        onmessage: (message) => handleMessage(message)
+      });
+    }
+
+    function resolveThemePayload(payload) {
+      const t = payload && typeof payload === 'object' ? payload : null;
+      if (!t) return payload;
+      const overrides = t.overrides && typeof t.overrides === 'object' ? t.overrides : null;
+      const o = overrides && overrides[OUTPUT_KEY] && typeof overrides[OUTPUT_KEY] === 'object' ? overrides[OUTPUT_KEY] : null;
+      if (!o) return t;
+      return { ...t, ...o, overrides };
+    }
+
+    function handleMessage(message) {
+      if (!message || typeof message.type !== 'string') return;
+
+      // Handle freeze state
+      if (message.type === 'OUTPUT_FREEZE') {
+        if (typeof message.payload?.target === 'string') {
+          if (message.payload.target === 'display') {
+            frozen = !!message.payload.frozen;
+          }
+        } else if (message.payload && typeof message.payload === 'object') {
+          frozen = !!message.payload.display;
+        }
+        return;
+      }
+
+      // Skip updates if frozen (except for certain messages)
+      if (frozen && !['DISPLAY_BLANK', 'DISPLAY_CLEAR', 'GO_LIVE'].includes(message.type)) {
+        return;
+      }
+
+      switch (message.type) {
+        case 'THEME_CHANGE':
+          applyTheme(resolveThemePayload(message.payload));
+          break;
+        case 'DISPLAY_VERSE':
+          if (!goLive) return;
+          showVerse(message.payload || {});
+          break;
+        case 'DISPLAY_LYRICS':
+          if (!goLive) return;
+          showLyrics(message.payload || {});
+          break;
+        case 'DISPLAY_SLIDE':
+          if (!goLive) return;
+          showSlide(message.payload || {});
+          break;
+        case 'DISPLAY_BLANK':
+          blankScreen();
+          break;
+        case 'DISPLAY_CLEAR':
+          clearContent();
+          break;
+        case 'GO_LIVE':
+          goLive = !!message.payload?.live;
+          if (!goLive) {
+            stopCountdown();
+            clearContent();
+            return;
+          }
+          if (currentMessage) {
+            renderCurrent();
+          }
+          break;
+        case 'SETTINGS_UPDATE':
+          loadPublicSettings();
+          break;
+        default:
+          log('Unknown message type:', message.type);
+      }
+    }
+
+    function applyTheme(theme) {
+      if (!theme) return;
+      
+      if (theme.primaryColor) document.documentElement.style.setProperty('--pfp-bg-panel', theme.primaryColor);
+      if (theme.secondaryColor) document.documentElement.style.setProperty('--pfp-gold', theme.secondaryColor);
+      if (theme.fontFamily) document.documentElement.style.setProperty('--pfp-font-body', theme.fontFamily);
+
+      baseBackground = theme.backgroundUrl ? String(theme.backgroundUrl) : null;
+      applyBackground();
+    }
+
+    function isVideoUrl(url) {
+      const u = String(url || '').toLowerCase();
+      return u.endsWith('.mp4') || u.endsWith('.webm') || u.endsWith('.ogg');
+    }
+
+    function applyBackground() {
+      const effective = slideBackground ? slideBackground : baseBackground;
+      if (!effective) {
+        bgImage.style.display = 'none';
+        bgVideo.style.display = 'none';
+        try { bgVideo.pause(); } catch {}
+        return;
+      }
+      if (isVideoUrl(effective)) {
+        bgImage.style.display = 'none';
+        bgVideo.style.display = 'block';
+        if (bgVideo.src !== new URL(effective, `http://${location.host}`).toString()) {
+          bgVideo.src = effective;
+        }
+        try { bgVideo.play().catch(() => {}); } catch {}
+        return;
+      }
+      bgVideo.style.display = 'none';
+      try { bgVideo.pause(); } catch {}
+      bgImage.style.display = 'block';
+      bgImage.src = effective;
+    }
+
+    function stopCountdown() {
+      countdownPayload = null;
+      if (countdownInterval) {
+        try { clearInterval(countdownInterval); } catch {}
+        countdownInterval = null;
+      }
+    }
+
+    function hideLowerThird() {
+      if (lowerThirdTimeout) {
+        try { clearTimeout(lowerThirdTimeout); } catch {}
+        lowerThirdTimeout = null;
+      }
+      lowerThird.classList.remove('visible');
+      lowerThirdText.textContent = '';
+    }
+
+    function showLowerThird(text, durationSec) {
+      const t = String(text || '').trim();
+      if (!t || !goLive) return;
+      hideLowerThird();
+      lowerThirdText.textContent = t;
+      lowerThird.classList.add('visible');
+      const d = Math.max(1, Number(durationSec) || 10);
+      lowerThirdTimeout = setTimeout(() => hideLowerThird(), d * 1000);
+    }
+
+    function formatCountdown(seconds) {
+      const s = Math.max(0, Math.floor(Number(seconds) || 0));
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const r = s % 60;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+    }
+
+    function startCountdown(payload) {
+      stopCountdown();
+      countdownPayload = payload || {};
+      const tick = () => {
+        const startedAt = Number(countdownPayload?.startedAt) || Date.now();
+        const durationSec = Number(countdownPayload?.durationSec) || 0;
+        const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+        const remaining = Math.max(0, durationSec - elapsed);
+        hideStandby();
+        mainText.textContent = String(countdownPayload?.title || '').trim() || 'Service begins in';
+        reference.textContent = formatCountdown(remaining);
+        translation.textContent = '';
+        mainText.style.display = 'block';
+        reference.style.display = 'block';
+        translation.style.display = 'none';
+        qrWrap.style.display = 'none';
+      };
+      tick();
+      countdownInterval = setInterval(tick, 250);
+    }
+
+    function showVerse(payload) {
+      stopCountdown();
+      hideStandby();
+      mainText.classList.remove('pfp-lyrics');
+      root.dataset.bgKind = '';
+      slideBackground = null;
+      applyBackground();
+
+      const text = String(payload?.text || '');
+      const ref = String(payload?.reference || '');
+      const tr = String(payload?.translation || '');
+      const secondText = String(payload?.secondText || '');
+      const secondTr = String(payload?.secondTranslation || '');
+
+      qrWrap.style.display = 'none';
+
+      if (secondText.trim()) {
+        mainText.innerHTML = '';
+        const wrap = document.createElement('div');
+        wrap.className = 'dual-wrap';
+        const left = document.createElement('div');
+        left.className = 'dual-col';
+        const right = document.createElement('div');
+        right.className = 'dual-col';
+        left.innerHTML = `<div class="pfp-verse-block">${window.PfpOutput.escapeHtml(text)}</div><div class="dual-translation">${window.PfpOutput.escapeHtml(tr)}</div>`;
+        right.innerHTML = `<div class="pfp-verse-block">${window.PfpOutput.escapeHtml(secondText)}</div><div class="dual-translation">${window.PfpOutput.escapeHtml(secondTr)}</div>`;
+        wrap.appendChild(left);
+        wrap.appendChild(right);
+        mainText.appendChild(wrap);
+        reference.textContent = ref;
+        translation.textContent = '';
+        mainText.style.display = 'block';
+        reference.style.display = 'block';
+        translation.style.display = 'none';
+      } else {
+        mainText.textContent = text;
+        reference.textContent = ref;
+        translation.textContent = tr;
+        mainText.style.display = 'block';
+        reference.style.display = 'block';
+        translation.style.display = 'block';
+      }
+
+      currentMessage = { type: 'DISPLAY_VERSE', payload };
+      window.PfpOutput.pulseFade(content);
+    }
+
+    function showLyrics(payload) {
+      stopCountdown();
+      hideStandby();
+      root.dataset.bgKind = '';
+      slideBackground = null;
+      applyBackground();
+
+      const lines = Array.isArray(payload?.lines) ? payload.lines : [];
+      const title = String(payload?.songTitle || '').trim();
+      const section = String(payload?.sectionLabel || '').trim();
+      const header = [title, section].filter(Boolean).join(' — ');
+
+      qrWrap.style.display = 'none';
+
+      mainText.textContent = lines.join('\n');
+      mainText.classList.add('pfp-lyrics');
+      reference.textContent = header;
+      translation.textContent = '';
+      mainText.style.display = 'block';
+      reference.style.display = header ? 'block' : 'none';
+      translation.style.display = 'none';
+
+      currentMessage = { type: 'DISPLAY_LYRICS', payload };
+      window.PfpOutput.pulseFade(content);
+    }
+
+    function showSlide(payload) {
+      if (payload?.overlayOnly) {
+        const title = String(payload?.title || '').trim();
+        const body = String(payload?.body || '').trim();
+        const combined = [title, body].filter(Boolean).join('\n').trim();
+        showLowerThird(combined, payload.duration || payload.durationSec || 10);
+        return;
+      }
+
+      stopCountdown();
+      hideStandby();
+      mainText.classList.remove('pfp-lyrics');
+
+      const slideType = typeof payload.type === 'string' ? payload.type : '';
+      root.dataset.bgKind = (slideType === 'media' && payload?.background && !isVideoUrl(payload.background)) ? 'media-image' : '';
+      slideBackground = payload?.background ? String(payload.background) : null;
+      applyBackground();
+
+      if (slideType === 'video') {
+        const state = String(payload?.state || 'play');
+        const seekSec = Number(payload?.timeSec);
+        const src = String(payload?.background || '');
+        if (state === 'stop') {
+          slideBackground = null;
+          applyBackground();
+          currentMessage = { type: 'DISPLAY_SLIDE', payload: { ...payload } };
+          showStandby();
+          return;
+        }
+        if (src) {
+          slideBackground = src;
+          applyBackground();
+          if (isVideoUrl(src)) {
+            if (Number.isFinite(seekSec) && seekSec >= 0) {
+              const seek = () => {
+                try { bgVideo.currentTime = seekSec; } catch {}
+                if (state === 'pause') {
+                  try { bgVideo.pause(); } catch {}
+                } else {
+                  try { bgVideo.play().catch(() => {}); } catch {}
+                }
+              };
+              if (bgVideo.readyState >= 1) seek();
+              else {
+                try { bgVideo.addEventListener('loadedmetadata', seek, { once: true }); } catch {}
+              }
+            }
+            if (state === 'pause') {
+              try { bgVideo.pause(); } catch {}
+            } else if (state === 'play') {
+              try { bgVideo.play().catch(() => {}); } catch {}
+            }
+          }
+        } else if (state === 'seek' && Number.isFinite(seekSec) && seekSec >= 0) {
+          try { bgVideo.currentTime = seekSec; } catch {}
+        }
+        const title = String(payload?.title || '').trim();
+        const body = String(payload?.body || '').trim();
+        if (!title && !body) {
+          mainText.textContent = '';
+          mainText.style.display = 'none';
+        } else {
+          mainText.textContent = title + (body ? `\n\n${body}` : '');
+          mainText.style.display = 'block';
+        }
+        reference.textContent = '';
+        translation.textContent = '';
+        reference.style.display = 'none';
+        translation.style.display = 'none';
+        qrWrap.style.display = 'none';
+        currentMessage = { type: 'DISPLAY_SLIDE', payload };
+        return;
+      }
+
+      if (slideType === 'countdown') {
+        currentMessage = { type: 'DISPLAY_SLIDE', payload };
+        startCountdown(payload);
+        return;
+      }
+
+      const title = String(payload?.title || '').trim();
+      const body = String(payload?.body || '').trim();
+      if (slideType === 'media' && !title && !body) {
+        mainText.textContent = '';
+        mainText.style.display = 'none';
+      } else {
+        mainText.textContent = title + (body ? `\n\n${body}` : '');
+        mainText.style.display = 'block';
+      }
+      reference.textContent = '';
+      translation.textContent = '';
+      reference.style.display = 'none';
+      translation.style.display = 'none';
+
+      if (slideType === 'giving') {
+        const url = String(payload?.givingUrl || payload?.body || '').trim();
+        const qr = String(payload?.qrDataUrl || '').trim();
+        if (qr) {
+          qrImage.src = qr;
+          qrText.textContent = url ? url : body;
+          qrWrap.style.display = 'flex';
+        } else if (url) {
+          qrText.textContent = url;
+          qrImage.removeAttribute('src');
+          qrWrap.style.display = 'flex';
+        } else {
+          qrWrap.style.display = 'none';
+        }
+      } else if (slideType === 'social') {
+        const platform = String(payload?.platform || '').trim();
+        const handle = String(payload?.handle || payload?.body || '').trim();
+        qrText.textContent = `${platform ? platform + ': ' : ''}${handle}`.trim();
+        qrImage.removeAttribute('src');
+        qrWrap.style.display = qrText.textContent ? 'flex' : 'none';
+      } else {
+        qrWrap.style.display = 'none';
+      }
+
+      currentMessage = { type: 'DISPLAY_SLIDE', payload };
+    }
+
+    function renderCurrent() {
+      if (!currentMessage) return;
+      if (currentMessage.type === 'DISPLAY_VERSE') showVerse(currentMessage.payload || {});
+      if (currentMessage.type === 'DISPLAY_LYRICS') showLyrics(currentMessage.payload || {});
+      if (currentMessage.type === 'DISPLAY_SLIDE') showSlide(currentMessage.payload || {});
+    }
+
+    function blankScreen() {
+      stopCountdown();
+      hideLowerThird();
+      document.body.classList.add('blank');
+    }
+
+    function clearContent() {
+      stopCountdown();
+      hideLowerThird();
+      document.body.classList.remove('blank');
+      root.dataset.bgKind = '';
+      showStandby();
+    }
+
+    function hideStandby() {
+      standby.style.display = 'none';
+    }
+
+    function showStandby() {
+      standby.style.display = 'flex';
+      mainText.style.display = 'none';
+      reference.style.display = 'none';
+      translation.style.display = 'none';
+      qrWrap.style.display = 'none';
+      mainText.textContent = '';
+      reference.textContent = '';
+      translation.textContent = '';
+      root.dataset.bgKind = '';
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      loadPublicSettings();
+      connect();
+      log('Display output initialized');
+    });
+  </script>
+</body>
+</html>

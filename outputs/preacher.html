@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pulpit Flow Pro - Preacher Monitor</title>
+  <link rel="stylesheet" href="/outputs/output-theme.css" />
+</head>
+<body class="pfp-preacher">
+  <div id="root">
+    <div id="header">
+      <div id="header-left">
+        <div id="badge">Preacher Monitor</div>
+        <div id="service-pos">—</div>
+      </div>
+      <div id="clock">00:00:00</div>
+    </div>
+
+    <div id="content">
+      <div class="pane">
+        <div class="pane-label">Current Content</div>
+        <div class="pane-content" id="scripture-pane">
+          <div id="empty-scripture" class="pfp-empty">
+            <div class="pfp-empty-icon">📖</div>
+            <div>Waiting for scripture...</div>
+          </div>
+          <div id="scripture-content" style="display: none;">
+            <div id="scripture-text"></div>
+            <div id="scripture-ref"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane">
+        <div class="pane-label">Private Notes</div>
+        <div class="pane-content" id="notes-pane">
+          <div id="empty-notes" class="pfp-empty">
+            <div class="pfp-empty-icon">📝</div>
+            <div>No notes yet...</div>
+          </div>
+          <div id="notes-content" style="display: none;">
+            <div id="notes-text"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="pfp-reconnect" class="pfp-reconnect" hidden></div>
+  <script src="/outputs/output-utils.js"></script>
+  <script>
+const DEBUG = new URLSearchParams(location.search).has('debug');
+    const log = (...args) => DEBUG && console.log('[Preacher]', ...args);
+
+    const clockEl = document.getElementById('clock');
+    const servicePosEl = document.getElementById('service-pos');
+    const scripturePane = document.getElementById('scripture-pane');
+    const scriptureContent = document.getElementById('scripture-content');
+    const scriptureText = document.getElementById('scripture-text');
+    const scriptureRef = document.getElementById('scripture-ref');
+    const notesPane = document.getElementById('notes-pane');
+    const notesContent = document.getElementById('notes-content');
+    const notesText = document.getElementById('notes-text');
+
+    let currentPayload = null;
+    let currentNotes = '';
+    let countdownInterval = null;
+    let countdownPayload = null;
+    let frozen = false;
+    let goLive = false;
+    const OUTPUT_KEY = 'preacher';
+
+    let connection = null;
+
+    function resolveThemePayload(payload) {
+      const t = payload && typeof payload === 'object' ? payload : null;
+      if (!t) return payload;
+      const overrides = t.overrides && typeof t.overrides === 'object' ? t.overrides : null;
+      const o = overrides && overrides[OUTPUT_KEY] && typeof overrides[OUTPUT_KEY] === 'object' ? overrides[OUTPUT_KEY] : null;
+      if (!o) return t;
+      return { ...t, ...o, overrides };
+    }
+
+    function applyTheme(theme) {
+      if (!theme) return;
+      if (theme.primaryColor) document.documentElement.style.setProperty('--pfp-bg-panel', theme.primaryColor);
+      if (theme.secondaryColor) document.documentElement.style.setProperty('--pfp-gold', theme.secondaryColor);
+      if (theme.fontFamily) document.documentElement.style.setProperty('--pfp-font-body', theme.fontFamily);
+    }
+
+    function connect() {
+      connection = window.PfpOutput.createConnection({
+        onopen: () => { log('WebSocket connected') },
+        onmessage: (message) => handleMessage(message)
+      });
+    }
+
+    function getWs() {
+      return connection?.socket || null;
+    }
+
+    function stopCountdown() {
+      countdownPayload = null;
+      if (countdownInterval) {
+        try { clearInterval(countdownInterval); } catch {}
+        countdownInterval = null;
+      }
+    }
+
+    function formatCountdown(seconds) {
+      const s = Math.max(0, Math.floor(Number(seconds) || 0));
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const r = s % 60;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+    }
+
+    function startCountdown(payload) {
+      stopCountdown();
+      countdownPayload = payload || {};
+      const tick = () => {
+        const startedAt = Number(countdownPayload?.startedAt) || Date.now();
+        const durationSec = Number(countdownPayload?.durationSec) || 0;
+        const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+        const remaining = Math.max(0, durationSec - elapsed);
+        scriptureText.textContent = String(countdownPayload?.title || '').trim() || 'Service begins in';
+        scriptureRef.textContent = formatCountdown(remaining);
+      };
+      tick();
+      countdownInterval = setInterval(tick, 250);
+    }
+
+    function handleMessage(message) {
+      if (!message || typeof message.type !== 'string') return;
+      log('Received message:', message.type);
+
+      if (message.type === 'OUTPUT_FREEZE') {
+        if (typeof message.payload?.target === 'string') {
+          if (message.payload.target === 'preacher') frozen = !!message.payload.frozen;
+        } else if (message.payload && typeof message.payload === 'object') {
+          frozen = !!message.payload.preacher;
+        }
+        return;
+      }
+
+      if (frozen && !['DISPLAY_BLANK', 'DISPLAY_CLEAR', 'GO_LIVE'].includes(message.type)) return;
+
+      if (message.type === 'THEME_CHANGE') {
+        applyTheme(resolveThemePayload(message.payload));
+        return;
+      }
+
+      if (message.type === 'GO_LIVE') {
+        goLive = !!message.payload?.live;
+        if (!goLive) {
+          stopCountdown();
+          clearContent();
+          return;
+        }
+        updateDisplay();
+        return;
+      }
+
+      if (message.type === 'DISPLAY_BLANK') {
+        document.body.classList.add('blank');
+        return;
+      }
+
+      if (message.type === 'DISPLAY_CLEAR') {
+        document.body.classList.remove('blank');
+        currentPayload = null;
+        stopCountdown();
+        clearContent();
+        return;
+      }
+
+      if (message.type === 'SERVICE_ADVANCE') {
+        const p = message.payload || {};
+        const bi = Number.isFinite(p.blockIndex) ? p.blockIndex + 1 : '';
+        const bt = String(p.blockTitle || p.blockType || '').trim();
+        servicePosEl.textContent = `${bi ? 'Block ' + bi : 'Block'}${bt ? ' — ' + bt : ''}`.trim() || '—';
+        return;
+      }
+
+      if (message.type === 'PREACHER_NOTE') {
+        currentNotes = String(message.payload?.note || '');
+        updateNotes();
+        return;
+      }
+
+      if (message.type === 'PREACHER_VERSE') {
+        currentPayload = { type: 'DISPLAY_VERSE', payload: message.payload || {} };
+        updateDisplay();
+        return;
+      }
+
+      if (message.type === 'PING') {
+        try { getWs()?.send(JSON.stringify({ type: 'PONG', payload: {}, timestamp: Date.now() })); } catch {}
+        return;
+      }
+
+      if (!goLive) return;
+
+      if (message.type === 'DISPLAY_VERSE' || message.type === 'DISPLAY_LYRICS' || message.type === 'DISPLAY_SLIDE') {
+        currentPayload = { type: message.type, payload: message.payload || {} };
+        updateDisplay();
+        return;
+      }
+    }
+
+    function updateDisplay() {
+      if (currentPayload) {
+        const p = currentPayload.payload || {};
+        scriptureContent.style.display = 'block';
+        scripturePane.querySelector('#empty-scripture').style.display = 'none';
+
+        if (currentPayload.type === 'DISPLAY_VERSE') {
+          stopCountdown();
+          scriptureText.textContent = String(p.text || '');
+          scriptureRef.textContent = String(p.reference || '');
+        } else if (currentPayload.type === 'DISPLAY_LYRICS') {
+          stopCountdown();
+          const lines = Array.isArray(p.lines) ? p.lines : [];
+          const title = String(p.songTitle || '').trim();
+          const section = String(p.sectionLabel || '').trim();
+          scriptureText.textContent = lines.join('\n');
+          scriptureRef.textContent = [title, section].filter(Boolean).join(' — ');
+        } else if (currentPayload.type === 'DISPLAY_SLIDE') {
+          const slideType = typeof p.type === 'string' ? p.type : '';
+          if (slideType === 'countdown') {
+            startCountdown(p);
+          } else {
+            stopCountdown();
+            const title = String(p.title || '').trim();
+            const body = String(p.body || '').trim();
+            scriptureText.textContent = title + (body ? '\n\n' + body : '');
+            scriptureRef.textContent = '';
+          }
+        }
+      } else {
+        stopCountdown();
+        clearContent();
+      }
+
+      updateNotes();
+    }
+
+    function updateNotes() {
+      if (currentNotes && String(currentNotes).trim()) {
+        notesContent.style.display = 'block';
+        notesPane.querySelector('#empty-notes').style.display = 'none';
+        notesText.textContent = currentNotes;
+      } else {
+        notesContent.style.display = 'none';
+        notesPane.querySelector('#empty-notes').style.display = 'flex';
+        notesText.textContent = '';
+      }
+    }
+
+    function clearContent() {
+      scriptureContent.style.display = 'none';
+      scripturePane.querySelector('#empty-scripture').style.display = 'flex';
+      scriptureText.textContent = '';
+      scriptureRef.textContent = '';
+    }
+
+    function updateClock() {
+      const now = new Date();
+      clockEl.textContent = now.toLocaleTimeString('en-US', { 
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      connect();
+      updateClock();
+      setInterval(updateClock, 1000);
+      log('Preacher monitor initialized');
+    });
+  </script>
+</body>
+</html>

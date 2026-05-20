@@ -1,0 +1,35 @@
+appId: com.church.pulpitflowpro
+productName: Pulpit Flow Pro
+directories:
+  buildResources: assets
+  output: release
+
+win:
+  target:
+    - nsis
+    - portable
+  certificateFile: null
+  signingHashAlgorithms:
+    - sha256
+  sign: null
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Pulpit Flow Pro
+
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.productivity
+  notarize: false
+
+files:
+  - from: dist
+    to: .
+  - from: electron
+    to: electron
+  - package.json

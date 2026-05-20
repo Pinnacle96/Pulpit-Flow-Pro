@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pulpit Flow Pro - Stage Monitor</title>
+  <link rel="stylesheet" href="/outputs/output-theme.css" />
+</head>
+<body class="pfp-stage">
+  <div id="root">
+    <div id="header" class="pfp-monitor-header">
+      <div id="badge" class="pfp-badge">Stage Monitor</div>
+      <div id="meta">
+        <div id="clock">00:00:00</div>
+        <div id="timer">--:--</div>
+      </div>
+    </div>
+
+    <div id="panes">
+      <div class="pane">
+        <div class="pane-label">Current</div>
+        <div class="pane-content">
+          <div id="current-text">Waiting for content...</div>
+        </div>
+      </div>
+
+      <div class="pane">
+        <div class="pane-label">Next</div>
+        <div class="pane-content">
+          <div id="next-text">--</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="chords-panel">
+      <div id="chords-label">Chords</div>
+      <div id="chords-content"></div>
+    </div>
+  </div>
+
+  <div id="pfp-reconnect" class="pfp-reconnect" hidden></div>
+  <script src="/outputs/output-utils.js"></script>
+  <script>
+// Stage Monitor Controller
+    const DEBUG = new URLSearchParams(location.search).has('debug');
+    const log = (...args) => DEBUG && console.log('[Stage]', ...args);
+
+    // Elements
+    const currentText = document.getElementById('current-text');
+    const nextText = document.getElementById('next-text');
+    const clockEl = document.getElementById('clock');
+    const timerEl = document.getElementById('timer');
+    const chordsPanel = document.getElementById('chords-panel');
+    const chordsContent = document.getElementById('chords-content');
+
+    // State
+    let currentMessage = null;
+    let chordMode = false;
+    let timerState = null;
+    let countdownInterval = null;
+    let countdownPayload = null;
+    let frozen = false;
+    let goLive = false;
+    const OUTPUT_KEY = 'stage';
+
+    // WebSocket
+    let connection = null;
+
+    function connect() {
+      connection = window.PfpOutput.createConnection({
+        onopen: () => { log('Connected') },
+        onmessage: (message) => handleMessage(message)
+      });
+    }
+
+    function getWs() {
+      return connection?.socket || null;
+    }
+
+    function resolveThemePayload(payload) {
+      const t = payload && typeof payload === 'object' ? payload : null;
+      if (!t) return payload;
+      const overrides = t.overrides && typeof t.overrides === 'object' ? t.overrides : null;
+      const o = overrides && overrides[OUTPUT_KEY] && typeof overrides[OUTPUT_KEY] === 'object' ? overrides[OUTPUT_KEY] : null;
+      if (!o) return t;
+      return { ...t, ...o, overrides };
+    }
+
+    function applyTheme(theme) {
+      if (!theme) return;
+      if (theme.primaryColor) document.documentElement.style.setProperty('--pfp-bg-panel', theme.primaryColor);
+      if (theme.secondaryColor) document.documentElement.style.setProperty('--pfp-gold', theme.secondaryColor);
+      if (theme.fontFamily) document.documentElement.style.setProperty('--pfp-font-body', theme.fontFamily);
+    }
+
+    function stopCountdown() {
+      countdownPayload = null;
+      if (countdownInterval) {
+        try { clearInterval(countdownInterval); } catch {}
+        countdownInterval = null;
+      }
+    }
+
+    function formatCountdown(seconds) {
+      const s = Math.max(0, Math.floor(Number(seconds) || 0));
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const r = s % 60;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+    }
+
+    function startCountdown(payload) {
+      stopCountdown();
+      countdownPayload = payload || {};
+      const tick = () => {
+        const startedAt = Number(countdownPayload?.startedAt) || Date.now();
+        const durationSec = Number(countdownPayload?.durationSec) || 0;
+        const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+        const remaining = Math.max(0, durationSec - elapsed);
+        currentText.textContent = `${String(countdownPayload?.title || '').trim() || 'Service begins in'}\n\n${formatCountdown(remaining)}`;
+        nextText.textContent = '';
+        chordsPanel.classList.remove('visible');
+        chordsContent.textContent = '';
+      };
+      tick();
+      countdownInterval = setInterval(tick, 250);
+    }
+
+    function handleMessage(message) {
+      if (!message || typeof message.type !== 'string') return;
+      log('Message:', message.type);
+
+      if (message.type === 'OUTPUT_FREEZE') {
+        if (typeof message.payload?.target === 'string') {
+          if (message.payload.target === 'stage') frozen = !!message.payload.frozen;
+        } else if (message.payload && typeof message.payload === 'object') {
+          frozen = !!message.payload.stage;
+        }
+        return;
+      }
+
+      if (frozen && !['DISPLAY_BLANK', 'DISPLAY_CLEAR', 'GO_LIVE'].includes(message.type)) return;
+
+      if (message.type === 'THEME_CHANGE') {
+        applyTheme(resolveThemePayload(message.payload));
+        return;
+      }
+
+      if (message.type === 'GO_LIVE') {
+        goLive = !!message.payload?.live;
+        if (!goLive) {
+          showStandby();
+          return;
+        }
+        renderCurrent();
+        return;
+      }
+
+      if (message.type === 'DISPLAY_BLANK') {
+        document.body.classList.add('blank');
+        return;
+      }
+
+      if (message.type === 'DISPLAY_CLEAR') {
+        document.body.classList.remove('blank');
+        showStandby();
+        currentMessage = null;
+        stopCountdown();
+        return;
+      }
+
+      if (message.type === 'STAGE_CHORD_MODE') {
+        chordMode = !!message.payload?.enabled;
+        renderCurrent();
+        return;
+      }
+
+      if (message.type === 'TIMER_UPDATE') {
+        timerState = message.payload;
+        updateTimer();
+        return;
+      }
+
+      if (message.type === 'PING') {
+        try { getWs()?.send(JSON.stringify({ type: 'PONG', payload: {}, timestamp: Date.now() })); } catch {}
+        return;
+      }
+
+      if (!goLive) return;
+
+      if (message.type === 'DISPLAY_VERSE' || message.type === 'DISPLAY_LYRICS' || message.type === 'DISPLAY_SLIDE') {
+        currentMessage = message;
+        updateDisplay();
+        return;
+      }
+    }
+
+    function updateDisplay() {
+      renderCurrent();
+    }
+
+    function showStandby() {
+      stopCountdown();
+      currentText.textContent = 'Waiting for content...';
+      nextText.textContent = '--';
+      chordsPanel.classList.remove('visible');
+      chordsContent.textContent = '';
+    }
+
+    function renderLyrics(lines, chordsLines) {
+      const lns = Array.isArray(lines) ? lines : [];
+      const chords = Array.isArray(chordsLines) ? chordsLines : [];
+      if (!chordMode) {
+        return window.PfpOutput.escapeHtml(lns.join('\n'));
+      }
+      const parts = [];
+      for (let i = 0; i < lns.length; i++) {
+        const chord = String(chords[i] || '').trimEnd();
+        if (chord) parts.push(`<div class="pfp-chord-line">${window.PfpOutput.escapeHtml(chord)}</div>`);
+        parts.push(`<div>${window.PfpOutput.escapeHtml(String(lns[i] || ''))}</div>`);
+      }
+      return parts.join('');
+    }
+
+    function renderCurrent() {
+      if (!currentMessage) {
+        showStandby();
+        return;
+      }
+      const payload = currentMessage.payload || {};
+      if (currentMessage.type === 'DISPLAY_VERSE') {
+        stopCountdown();
+        currentText.textContent = String(payload.text || '');
+        nextText.textContent = '';
+        chordsPanel.classList.remove('visible');
+        chordsContent.textContent = '';
+        window.PfpOutput.pulseFade(currentText);
+        return;
+      }
+      if (currentMessage.type === 'DISPLAY_LYRICS') {
+        stopCountdown();
+        const lines = Array.isArray(payload.lines) ? payload.lines : [];
+        const nextLines = Array.isArray(payload.nextLines) ? payload.nextLines : [];
+        const chordsLines = Array.isArray(payload.chordsLines) ? payload.chordsLines : [];
+        currentText.innerHTML = renderLyrics(lines, chordsLines);
+        nextText.textContent = nextLines.join('\n');
+        if (chordMode) {
+          chordsPanel.classList.add('visible');
+          chordsContent.textContent = '';
+        } else {
+          chordsPanel.classList.remove('visible');
+          chordsContent.textContent = '';
+        }
+        window.PfpOutput.pulseFade(currentText);
+        return;
+      }
+      if (currentMessage.type === 'DISPLAY_SLIDE') {
+        const slideType = typeof payload.type === 'string' ? payload.type : '';
+        if (slideType === 'countdown') {
+          startCountdown(payload);
+          return;
+        }
+        stopCountdown();
+        const title = String(payload.title || '').trim();
+        const body = String(payload.body || '').trim();
+        currentText.textContent = title + (body ? '\n\n' + body : '');
+        nextText.textContent = '';
+        chordsPanel.classList.remove('visible');
+        chordsContent.textContent = '';
+        window.PfpOutput.pulseFade(currentText);
+      }
+    }
+
+    function updateTimer() {
+      if (!timerState) return;
+      
+      const { label, remainingMs, running } = timerState;
+      const totalSec = Math.max(0, Math.floor(Number(remainingMs) / 1000));
+      const hours = Math.floor(totalSec / 3600);
+      const minutes = Math.floor((totalSec % 3600) / 60);
+      const seconds = totalSec % 60;
+      const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+      
+      timerEl.textContent = label ? `${label}: ${timeStr}` : timeStr;
+      timerEl.style.color = running ? 'var(--pfp-text)' : 'var(--pfp-text-dim)';
+    }
+
+    function updateClock() {
+      const now = new Date();
+      clockEl.textContent = now.toLocaleTimeString('en-US', { 
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      connect();
+      updateClock();
+      setInterval(updateClock, 1000);
+      log('Stage monitor initialized');
+    });
+  </script>
+</body>
+</html>

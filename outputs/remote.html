@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pulpit Flow Pro - Remote Control</title>
+  <link rel="stylesheet" href="/outputs/output-theme.css" />
+</head>
+<body class="pfp-remote">
+  <div class="container">
+    <header>
+      <h1>Remote Control</h1>
+      <div class="status-pill" id="livePill">Standby</div>
+    </header>
+
+    <div class="card" id="pinScreen">
+      <div class="card-title">Enter PIN</div>
+      <div class="input-group">
+        <input type="password" id="pinInput" maxlength="4" placeholder="••••" inputmode="numeric">
+      </div>
+      <button id="unlockBtn" class="btn-primary">Unlock</button>
+      <div class="status-bar hidden" id="pinError"></div>
+    </div>
+
+    <div class="card hidden" id="modeCard">
+      <div class="card-title">Control Mode</div>
+      <div class="input-group">
+        <select id="modeSelect">
+          <option value="FULL">Full Operator</option>
+          <option value="VIEW">View Only</option>
+          <option value="WORSHIP">Worship Leader</option>
+          <option value="PASTOR">Pastor</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card hidden" id="currentBlockCard">
+      <div class="card-title">Current Block</div>
+      <div id="blockTitle" class="block-title">—</div>
+      <div id="slideSnippet" class="slide-snippet"></div>
+    </div>
+
+    <div class="card hidden" id="controlsCard">
+      <div class="button-grid">
+        <button id="prevBtn" class="mode-full">Previous</button>
+        <button id="nextBtn" class="mode-full btn-primary">Next</button>
+        
+        <button id="worshipPrevBtn" class="mode-worship hidden">Prev Section</button>
+        <button id="worshipNextBtn" class="mode-worship btn-primary hidden">Next Section</button>
+        
+        <button id="pastorPrevBtn" class="mode-pastor hidden">Prev Scripture</button>
+        <button id="pastorNextBtn" class="mode-pastor btn-primary hidden">Next Scripture</button>
+        
+        <button id="blankBtn" class="mode-full btn-danger">Blank All</button>
+        <button id="clearBtn" class="mode-full">Clear</button>
+        
+        <button id="toggleLiveBtn" class="mode-full" style="grid-column: 1 / -1;">Toggle Go Live</button>
+      </div>
+    </div>
+
+    <div class="status-bar hidden" id="statusBar">Ready</div>
+  </div>
+
+  <div id="pfp-reconnect" class="pfp-reconnect" hidden></div>
+  <script src="/outputs/output-utils.js"></script>
+  <script>
+// Remote Control
+    const pinScreen = document.getElementById('pinScreen');
+    const pinInput = document.getElementById('pinInput');
+    const unlockBtn = document.getElementById('unlockBtn');
+    const pinError = document.getElementById('pinError');
+    const modeCard = document.getElementById('modeCard');
+    const modeSelect = document.getElementById('modeSelect');
+    const currentBlockCard = document.getElementById('currentBlockCard');
+    const blockTitle = document.getElementById('blockTitle');
+    const slideSnippet = document.getElementById('slideSnippet');
+    const controlsCard = document.getElementById('controlsCard');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const worshipPrevBtn = document.getElementById('worshipPrevBtn');
+    const worshipNextBtn = document.getElementById('worshipNextBtn');
+    const pastorPrevBtn = document.getElementById('pastorPrevBtn');
+    const pastorNextBtn = document.getElementById('pastorNextBtn');
+    const blankBtn = document.getElementById('blankBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const toggleLiveBtn = document.getElementById('toggleLiveBtn');
+    const livePill = document.getElementById('livePill');
+    const statusBar = document.getElementById('statusBar');
+
+    let connection = null;
+    let authed = false;
+    let mode = 'FULL';
+    let goLive = false;
+
+    function applyMode(next) {
+      mode = next === 'WORSHIP' ? 'WORSHIP' : next === 'PASTOR' ? 'PASTOR' : next === 'VIEW' ? 'VIEW' : 'FULL';
+      document.querySelectorAll('.mode-full').forEach(el => el.classList.toggle('hidden', mode !== 'FULL'));
+      document.querySelectorAll('.mode-worship').forEach(el => el.classList.toggle('hidden', mode !== 'WORSHIP'));
+      document.querySelectorAll('.mode-pastor').forEach(el => el.classList.toggle('hidden', mode !== 'PASTOR'));
+      controlsCard.classList.toggle('hidden', mode === 'VIEW');
+    }
+
+    function setLive(live) {
+      goLive = !!live;
+      livePill.textContent = goLive ? 'Live' : 'Standby';
+      livePill.classList.toggle('live', goLive);
+    }
+
+    function setStatus(text) {
+      statusBar.textContent = text || '';
+      statusBar.classList.remove('hidden');
+    }
+
+    async function verifyPin(pin) {
+      try {
+        const res = await fetch(`http://${location.host}/api/remote/verify-pin`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin })
+        });
+        if (!res.ok) return false;
+        const data = await res.json();
+        return !!data.ok;
+      } catch {
+        return false;
+      }
+    }
+
+    function sendCommand(command) {
+      if (mode === 'VIEW') return;
+      if (!getWs() || getWs().readyState !== 1) return;
+      getWs().send(JSON.stringify({ type: 'REMOTE_COMMAND', payload: { command }, timestamp: Date.now() }));
+    }
+
+    function handleMessage(message) {
+      if (!message || typeof message.type !== 'string') return;
+
+      const truncate = (text, max = 180) => {
+        const t = String(text || '').replace(/\s+/g, ' ').trim();
+        if (t.length <= max) return t;
+        return t.slice(0, max - 1).trimEnd() + '…';
+      };
+
+      const setSnippet = (text) => {
+        slideSnippet.textContent = text ? truncate(text) : '';
+      };
+
+      if (message.type === 'GO_LIVE') {
+        setLive(!!message.payload?.live);
+        return;
+      }
+
+      if (message.type === 'SERVICE_ADVANCE') {
+        const p = message.payload || {};
+        blockTitle.textContent = p.blockTitle || p.blockType || '—';
+        return;
+      }
+
+      if (message.type === 'DISPLAY_BLANK') {
+        setSnippet('Blank');
+        return;
+      }
+
+      if (message.type === 'DISPLAY_CLEAR') {
+        setSnippet('');
+        return;
+      }
+
+      if (message.type === 'DISPLAY_VERSE') {
+        const p = message.payload || {};
+        const ref = String(p.reference || '').trim();
+        const text = String(p.text || '').trim();
+        setSnippet(`${ref} ${text}`.trim());
+        return;
+      }
+
+      if (message.type === 'DISPLAY_LYRICS') {
+        const p = message.payload || {};
+        const title = String(p.songTitle || '').trim();
+        const section = String(p.sectionLabel || '').trim();
+        const lines = Array.isArray(p.lines) ? p.lines : [];
+        const body = lines.slice(0, 4).join(' ');
+        setSnippet(`${title}${section ? ' — ' + section : ''} ${body}`.trim());
+        return;
+      }
+
+      if (message.type === 'DISPLAY_SLIDE') {
+        const p = message.payload || {};
+        const slideType = String(p.type || '').trim().toLowerCase();
+        if (slideType === 'countdown') {
+          setSnippet(`${String(p.title || '').trim()} (countdown)`.trim());
+          return;
+        }
+        if (slideType === 'giving') {
+          setSnippet(`${String(p.title || '').trim()} ${String(p.givingUrl || p.body || '').trim()}`.trim());
+          return;
+        }
+        if (slideType === 'social') {
+          setSnippet(`${String(p.title || '').trim()} ${String(p.platform || '').trim()} ${String(p.handle || p.body || '').trim()}`.trim());
+          return;
+        }
+        setSnippet(`${String(p.title || '').trim()} ${String(p.body || '').trim()}`.trim());
+        return;
+      }
+
+      if (message.type === 'PING') {
+        try {
+          getWs()?.send(JSON.stringify({ type: 'PONG', payload: {}, timestamp: Date.now() }));
+        } catch {}
+        return;
+      }
+    }
+
+    function connect() {
+      connection = window.PfpOutput.createConnection({
+        onopen: () => { setStatus('Connected') },
+        onmessage: (message) => handleMessage(message)
+      });
+    }
+
+    function getWs() {
+      return connection?.socket || null;
+    }
+
+    unlockBtn.addEventListener('click', async () => {
+      const pin = pinInput.value.trim();
+      pinError.classList.add('hidden');
+      if (pin.length !== 4) {
+        pinError.textContent = 'Enter a 4-digit PIN.';
+        pinError.classList.remove('hidden');
+        return;
+      }
+      const ok = await verifyPin(pin);
+      if (!ok) {
+        pinError.textContent = 'Invalid PIN.';
+        pinError.classList.remove('hidden');
+        return;
+      }
+      authed = true;
+      pinScreen.classList.add('hidden');
+      modeCard.classList.remove('hidden');
+      currentBlockCard.classList.remove('hidden');
+      controlsCard.classList.remove('hidden');
+      applyMode(modeSelect.value);
+      connect();
+    });
+
+    pinInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') unlockBtn.click();
+    });
+
+    modeSelect.addEventListener('change', (e) => applyMode(e.target.value));
+
+    prevBtn.addEventListener('click', () => authed && sendCommand('PREV'));
+    nextBtn.addEventListener('click', () => authed && sendCommand('NEXT'));
+    blankBtn.addEventListener('click', () => authed && sendCommand('BLANK_ALL'));
+    toggleLiveBtn.addEventListener('click', () => authed && sendCommand('TOGGLE_GO_LIVE'));
+    clearBtn.addEventListener('click', () => authed && sendCommand('CLEAR'));
+    worshipPrevBtn.addEventListener('click', () => authed && sendCommand('WORSHIP_PREV'));
+    worshipNextBtn.addEventListener('click', () => authed && sendCommand('WORSHIP_NEXT'));
+    pastorPrevBtn.addEventListener('click', () => authed && sendCommand('PASTOR_PREV_SCRIPTURE'));
+    pastorNextBtn.addEventListener('click', () => authed && sendCommand('PASTOR_NEXT_SCRIPTURE'));
+
+    setLive(false);
+    setStatus('Locked');
+    applyMode('FULL');
+  </script>
+</body>
+</html>

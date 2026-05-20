@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pulpit Flow Pro - Stream Overlay</title>
+  <link rel="stylesheet" href="/outputs/output-theme.css" />
+</head>
+<body class="pfp-stream">
+  <div id="overlay-container">
+    <div class="lower-third">
+      <div id="overlay-text">Welcome to Pulpit Flow Pro</div>
+      <div id="overlay-ref">Stream Overlay Ready</div>
+    </div>
+  </div>
+
+  <div id="pfp-reconnect" class="pfp-reconnect" hidden></div>
+  <script src="/outputs/output-utils.js"></script>
+  <script>
+const DEBUG = new URLSearchParams(location.search).has('debug');
+    const IS_PREVIEW = new URLSearchParams(location.search).has('preview') || window.self !== window.top;
+
+    function isRenderableType(type) {
+      return type === 'DISPLAY_VERSE' || type === 'DISPLAY_LYRICS' || type === 'DISPLAY_SLIDE';
+    }
+
+    function showStandbyOverlay() {
+      overlayText.textContent = 'Welcome to Pulpit Flow Pro';
+      overlayRef.textContent = 'Stream Overlay Ready';
+      showHidden(false);
+    }
+
+    if (IS_PREVIEW) {
+      document.body.classList.add('preview');
+    }
+    const log = (...args) => {
+      if (DEBUG) console.log('[Stream]', ...args);
+    };
+    const logError = (...args) => {
+      if (DEBUG) console.error('[Stream]', ...args);
+    };
+
+    const container = document.getElementById('overlay-container');
+    const overlayText = document.getElementById('overlay-text');
+    const overlayRef = document.getElementById('overlay-ref');
+    const lowerThird = document.querySelector('.lower-third');
+    let connection = null;
+    let goLive = false;
+    let lastPayload = null;
+    let mode = new URLSearchParams(location.search).get('mode') === 'full' ? 'full' : 'lower';
+    let frozen = false;
+    const OUTPUT_KEY = 'stream';
+    let countdownInterval = null;
+    let countdownPayload = null;
+    let overlayTimeout = null;
+
+    function resolveThemePayload(payload) {
+      const t = payload && typeof payload === 'object' ? payload : null;
+      if (!t) return payload;
+      const overrides = t.overrides && typeof t.overrides === 'object' ? t.overrides : null;
+      const o = overrides && overrides[OUTPUT_KEY] && typeof overrides[OUTPUT_KEY] === 'object' ? overrides[OUTPUT_KEY] : null;
+      if (!o) return t;
+      return { ...t, ...o, overrides };
+    }
+
+    function applyTheme(theme) {
+      if (!theme) return;
+      if (theme.primaryColor) document.documentElement.style.setProperty('--pfp-bg-panel', theme.primaryColor);
+      if (theme.secondaryColor) document.documentElement.style.setProperty('--pfp-gold', theme.secondaryColor);
+      if (theme.fontFamily) document.documentElement.style.setProperty('--pfp-font-body', theme.fontFamily);
+    }
+
+    function setMode(next) {
+      mode = next === 'full' ? 'full' : 'lower';
+      container.classList.toggle('full', mode === 'full');
+    }
+
+    function stopCountdown() {
+      countdownPayload = null;
+      if (countdownInterval) {
+        try { clearInterval(countdownInterval); } catch {}
+        countdownInterval = null;
+      }
+    }
+
+    function clearOverlayTimeout() {
+      if (!overlayTimeout) return;
+      try { clearTimeout(overlayTimeout); } catch {}
+      overlayTimeout = null;
+    }
+
+    function formatCountdown(seconds) {
+      const s = Math.max(0, Math.floor(Number(seconds) || 0));
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const r = s % 60;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+    }
+    
+
+    function startCountdown(payload) {
+      stopCountdown();
+      countdownPayload = payload || {};
+      const tick = () => {
+        const startedAt = Number(countdownPayload?.startedAt) || Date.now();
+        const durationSec = Number(countdownPayload?.durationSec) || 0;
+        const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+        const remaining = Math.max(0, durationSec - elapsed);
+        overlayText.textContent = String(countdownPayload?.title || '').trim() || 'Service begins in';
+        overlayRef.textContent = formatCountdown(remaining);
+        showHidden(false);
+      };
+      tick();
+      countdownInterval = setInterval(tick, 250);
+    }
+
+    function showHidden(hidden) {
+      container.classList.toggle('hidden', !!hidden);
+    }
+
+    function renderFromPayload(messageType, payload) {
+      if (!goLive) {
+        showHidden(true);
+        return;
+      }
+
+      if (messageType === 'DISPLAY_VERSE') {
+        stopCountdown();
+        overlayText.textContent = payload.text || '';
+        overlayRef.textContent = payload.reference || '';
+        showHidden(false);
+        window.PfpOutput.pulseFade(overlayText);
+        return;
+      }
+      if (messageType === 'DISPLAY_LYRICS') {
+        stopCountdown();
+        overlayText.textContent = (payload.lines || []).join('\n');
+        overlayRef.textContent = payload.songTitle || '';
+        showHidden(false);
+        window.PfpOutput.pulseFade(overlayText);
+        return;
+      }
+      if (messageType === 'DISPLAY_SLIDE') {
+        const slideType = typeof payload.type === 'string' ? payload.type : '';
+        if (payload && payload.overlayOnly) {
+          clearOverlayTimeout();
+          const title = String(payload.title || '').trim();
+          const body = String(payload.body || '').trim();
+          overlayText.textContent = [title, body].filter(Boolean).join('\n').trim();
+          overlayRef.textContent = '';
+          showHidden(false);
+          const d = Math.max(1, Number(payload.duration || payload.durationSec) || 10);
+          overlayTimeout = setTimeout(() => {
+            overlayTimeout = null;
+            if (goLive && lastPayload && isRenderableType(lastPayload.type)) {
+              renderFromPayload(lastPayload.type, lastPayload.payload);
+            }
+          }, d * 1000);
+          return;
+        }
+        if (slideType === 'countdown') {
+          startCountdown(payload || {});
+          return;
+        }
+        stopCountdown();
+        if (slideType === 'giving') {
+          overlayText.textContent = String(payload.title || '').trim() || 'Give Online';
+          overlayRef.textContent = String(payload.givingUrl || payload.body || '').trim();
+          showHidden(false);
+          return;
+        }
+        if (slideType === 'social') {
+          const platform = String(payload.platform || '').trim();
+          const handle = String(payload.handle || payload.body || '').trim();
+          overlayText.textContent = String(payload.title || '').trim() || 'Follow Us';
+          overlayRef.textContent = `${platform ? platform + ': ' : ''}${handle}`.trim();
+          showHidden(false);
+          return;
+        }
+        overlayText.textContent = payload.title || '';
+        overlayRef.textContent = payload.body || '';
+        showHidden(false);
+        window.PfpOutput.pulseFade(overlayText);
+        return;
+      }
+      stopCountdown();
+      showHidden(true);
+    }
+
+    function handleMessage(message) {
+      if (!message || typeof message.type !== 'string') return;
+
+      if (message.type === 'THEME_CHANGE') {
+        applyTheme(resolveThemePayload(message.payload));
+        return;
+      }
+
+      if (message.type === 'OUTPUT_FREEZE') {
+        if (typeof message.payload?.target === 'string') {
+          if (message.payload.target === 'stream') frozen = !!message.payload.frozen;
+        } else if (message.payload && typeof message.payload === 'object') {
+          frozen = !!message.payload.stream;
+        }
+        return;
+      }
+
+      if (message.type === 'GO_LIVE') {
+        goLive = !!message.payload?.live;
+        if (!goLive) {
+          clearOverlayTimeout();
+          stopCountdown();
+          if (IS_PREVIEW) showStandbyOverlay();
+          else showHidden(true);
+          return;
+        }
+        if (lastPayload && isRenderableType(lastPayload.type)) {
+          renderFromPayload(lastPayload.type, lastPayload.payload);
+        } else if (IS_PREVIEW) {
+          showStandbyOverlay();
+        } else {
+          showHidden(true);
+        }
+        return;
+      }
+
+      if (message.type === 'STREAM_MODE') {
+        setMode(message.payload?.mode);
+        return;
+      }
+
+      if (message.type === 'DISPLAY_BLANK') {
+        clearOverlayTimeout();
+        stopCountdown();
+        showHidden(true);
+        return;
+      }
+
+      if (message.type === 'DISPLAY_CLEAR') {
+        if (frozen) return;
+        clearOverlayTimeout();
+        stopCountdown();
+        lastPayload = null;
+        if (IS_PREVIEW && !goLive) showStandbyOverlay();
+        else showHidden(true);
+        return;
+      }
+
+      if (message.type === 'PING') {
+        try {
+          getWs()?.send(JSON.stringify({ type: 'PONG', payload: {}, timestamp: Date.now() }));
+        } catch {}
+        return;
+      }
+
+      if (
+        message.type === 'DISPLAY_VERSE' ||
+        message.type === 'DISPLAY_LYRICS' ||
+        message.type === 'DISPLAY_SLIDE'
+      ) {
+        if (frozen) return;
+        if (!(message.type === 'DISPLAY_SLIDE' && message.payload && message.payload.overlayOnly)) {
+          lastPayload = { type: message.type, payload: message.payload || {} };
+        }
+        renderFromPayload(lastPayload.type, lastPayload.payload);
+        return;
+      }
+
+      log('Unknown message type:', message.type);
+    }
+
+    function connect() {
+      connection = window.PfpOutput.createConnection({
+        onopen: () => { log('WebSocket connected') },
+        onmessage: (message) => handleMessage(message)
+      });
+    }
+
+    function getWs() {
+      return connection?.socket || null;
+    }
+
+    if (IS_PREVIEW) showStandbyOverlay();
+    else showHidden(true);
+    setMode(mode);
+    connect();
+  </script>
+</body>
+</html>

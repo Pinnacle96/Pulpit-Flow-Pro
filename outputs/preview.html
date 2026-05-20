@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pulpit Flow Pro - Preview</title>
+  <link rel="stylesheet" href="/outputs/output-theme.css" />
+</head>
+<body class="pfp-preview">
+  <div id="root">
+    <div id="header">
+      <div>
+        <h1>Tech Preview</h1>
+        <div class="subtitle">Read-only monitoring</div>
+      </div>
+    </div>
+
+    <div id="grid">
+      <div class="cell">
+        <div class="cell-label">Congregation</div>
+        <div class="cell-content">
+          <iframe id="displayFrame"></iframe>
+        </div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">Stream</div>
+        <div class="cell-content">
+          <iframe id="streamFrame"></iframe>
+        </div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">Stage</div>
+        <div class="cell-content">
+          <iframe id="stageFrame"></iframe>
+        </div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">Preacher</div>
+        <div class="cell-content">
+          <iframe id="preacherFrame"></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const base = `http://${location.host}`;
+    document.getElementById('displayFrame').src = `${base}/display`;
+    document.getElementById('streamFrame').src = `${base}/stream`;
+    document.getElementById('stageFrame').src = `${base}/stage`;
+    document.getElementById('preacherFrame').src = `${base}/preacher`;
+  </script>
+</body>
+</html>
