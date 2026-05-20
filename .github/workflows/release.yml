@@ -16,6 +16,8 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
     steps:
       - uses: actions/checkout@v4
