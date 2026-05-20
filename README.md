@@ -14,7 +14,7 @@ Pulpit Flow Pro (PFP) is a modern, offline-first church production platform buil
 
 ## Get Started
 
-👉 Download the latest version: https://github.com/Pinnacle96/Pulpit-Flow-Pro/releases/latest  
+👉 Download the latest version: https://github.com/Pinnacle96/Pulpit-Flow-Pro/releases
 👉 Watch demo: (Add YouTube demo link here)
 
 ## Features
