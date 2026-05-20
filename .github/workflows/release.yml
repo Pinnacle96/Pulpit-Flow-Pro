@@ -64,7 +64,6 @@ jobs:
     needs: [build]
     runs-on: ubuntu-latest
     permissions:
-    permissions:
       contents: write
 
     steps:
